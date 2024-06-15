@@ -11,7 +11,7 @@ This SDL2 utility application provides an API to control gamepad rumble (force f
 
 ## Why does this exist?
 
-I was working with [openFrameworks](https://www.openframeworks.cc/) and [GLFW](https://github.com/glfw/glfw/) on a project that would have benefitted from force feedback on gamepads which GLFW still doesn't offer despite it being on the roadmap for [more than a decade](https://github.com/glfw/glfw/issues/57). I did find an a patch for the functionality in [rumble.zig](https://github.com/machlibs/rumble/blob/main/src/rumble.zig) but had no idea how to implement this in any sort of useful manner so I decided to examine my options. Rather than try and put rumble back into GLFW perhaps I could bridge the gap by using a different framework and accessing it via a simple API.
+I was working with [openFrameworks](https://www.openframeworks.cc/) and [GLFW](https://github.com/glfw/glfw/) on a project that would have benefitted from force feedback on gamepads which GLFW still doesn't offer despite it being on the roadmap for [more than a decade](https://github.com/glfw/glfw/issues/57). I did find a patch for the functionality in [rumble.zig](https://github.com/machlibs/rumble/blob/main/src/rumble.zig) but had no idea how to implement this in any sort of useful manner so I decided to examine my options. Rather than try and put rumble back into GLFW perhaps I could bridge the gap by using a different framework and accessing it via a simple API.
 
 ## API
 
@@ -75,7 +75,6 @@ The application handles graceful shutdown when receiving the SIGINT signal (Ctrl
 
 ### Improvements
 
-- The graceful shutdown actually doesn't work very well so I need to investigate that. For now you have to kill the process with extreme prejudice.
 - Don't stop the process from starting if there are no joysticks connected but continually poll for joysticks being removed or added. Is there an update on change with SDL? I'll find out…
 - Add proper logging 
 

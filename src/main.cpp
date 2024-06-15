@@ -6,14 +6,12 @@
 #include <thread>
 #include <chrono>
 #include <vector>
-
-// Network-related headers
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
 
-const int PORT = 123456; // Adjusted port number
+const int PORT = 123456;
 std::atomic<bool> running(true);
 std::vector<SDL_Joystick *> joysticks;
 
@@ -141,53 +139,75 @@ int main(int argc, char *argv[])
 
     while (running)
     {
-        int newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
-        if (newsockfd < 0)
+        fd_set readfds;
+        struct timeval tv;
+
+        FD_ZERO(&readfds);
+        FD_SET(sockfd, &readfds);
+
+        tv.tv_sec = 1; // Timeout of 1 second
+        tv.tv_usec = 0;
+
+        int retval = select(sockfd + 1, &readfds, NULL, NULL, &tv);
+
+        if (retval == -1)
         {
             if (running)
             {
-                std::cerr << "Error on accept" << std::endl;
+                std::cerr << "Error on select" << std::endl;
             }
-            continue;
+            break;
         }
-
-        std::cout << "Accepted a new connection" << std::endl;
-
-        char buffer[256];
-        std::memset(buffer, 0, 256);
-        int n = read(newsockfd, buffer, 255);
-        if (n < 0)
+        else if (retval)
         {
-            std::cerr << "Error reading from socket" << std::endl;
-            close(newsockfd);
-            continue;
-        }
-
-        std::cout << "Received command: " << buffer << std::endl;
-
-        // Parsing the command
-        int joystickIndex;
-        Uint16 low_freq, high_freq;
-        Uint32 duration;
-        if (sscanf(buffer, "%d %hu %hu %u", &joystickIndex, &low_freq, &high_freq, &duration) == 4)
-        {
-            if (joystickIndex >= 0 && joystickIndex < joysticks.size())
+            int newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
+            if (newsockfd < 0)
             {
-                handleRumble(joysticks[joystickIndex], low_freq, high_freq, duration);
+                if (running)
+                {
+                    std::cerr << "Error on accept" << std::endl;
+                }
+                continue;
+            }
+
+            std::cout << "Accepted a new connection" << std::endl;
+
+            char buffer[256];
+            std::memset(buffer, 0, 256);
+            int n = read(newsockfd, buffer, 255);
+            if (n < 0)
+            {
+                std::cerr << "Error reading from socket" << std::endl;
+                close(newsockfd);
+                continue;
+            }
+
+            std::cout << "Received command: " << buffer << std::endl;
+
+            // Parsing the command
+            int joystickIndex;
+            Uint16 low_freq, high_freq;
+            Uint32 duration;
+            if (sscanf(buffer, "%d %hu %hu %u", &joystickIndex, &low_freq, &high_freq, &duration) == 4)
+            {
+                if (joystickIndex >= 0 && joystickIndex < joysticks.size())
+                {
+                    handleRumble(joysticks[joystickIndex], low_freq, high_freq, duration);
+                }
+                else
+                {
+                    std::cerr << "Invalid joystick index: " << joystickIndex << std::endl;
+                }
             }
             else
             {
-                std::cerr << "Invalid joystick index: " << joystickIndex << std::endl;
+                std::cerr << "Invalid command format" << std::endl;
             }
-        }
-        else
-        {
-            std::cerr << "Invalid command format" << std::endl;
-        }
 
-        // Clean up the connection
-        close(newsockfd);
-        std::cout << "Connection closed" << std::endl;
+            // Clean up the connection
+            close(newsockfd);
+            std::cout << "Connection closed" << std::endl;
+        }
     }
 
     // Clean up resources before exiting
