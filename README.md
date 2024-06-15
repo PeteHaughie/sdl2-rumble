@@ -41,7 +41,7 @@ This command targets joystick 0 with a low-frequency rumble of 32000, high-frequ
 1. **Compile the SDL2 utility application:**
 
    ```sh
-   g++ -std=c++11 -o sdl2_joystick src/main.cpp -lSDL2
+   g++ -std=c++11 -o sdl2_joystick src/main.cpp -I/usr/local/include/SDL2 -D_THREAD_SAFE -L/usr/local/lib -lSDL2
    ```
    or just run the build.sh file as it contains the same instruction.
 

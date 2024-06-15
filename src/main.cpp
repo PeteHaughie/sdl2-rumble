@@ -13,11 +13,11 @@
 
 const int PORT = 123456;
 std::atomic<bool> running(true);
-std::vector<SDL_Joystick *> joysticks;
+std::vector<SDL_GameController *> controllers;
 
-void handleRumble(SDL_Joystick *joystick, Uint16 low_frequency_rumble, Uint16 high_frequency_rumble, Uint32 duration)
+void handleRumble(SDL_GameController *controller, Uint16 low_frequency_rumble, Uint16 high_frequency_rumble, Uint32 duration)
 {
-    if (SDL_JoystickRumble(joystick, low_frequency_rumble, high_frequency_rumble, duration) != 0)
+    if (SDL_GameControllerRumble(controller, low_frequency_rumble, high_frequency_rumble, duration) != 0)
     {
         std::cerr << "Error: Unable to start rumble: " << SDL_GetError() << std::endl;
     }
@@ -25,7 +25,7 @@ void handleRumble(SDL_Joystick *joystick, Uint16 low_frequency_rumble, Uint16 hi
     {
         std::cout << "Rumble started: low_freq=" << low_frequency_rumble << ", high_freq=" << high_frequency_rumble << ", duration=" << duration << " ms" << std::endl;
         std::this_thread::sleep_for(std::chrono::milliseconds(duration));
-        SDL_JoystickRumble(joystick, 0, 0, 0); // Stop rumble
+        SDL_GameControllerRumble(controller, 0, 0, 0); // Stop rumble
         std::cout << "Rumble stopped" << std::endl;
     }
 }
@@ -39,8 +39,8 @@ void signalHandler(int signum)
 int main(int argc, char *argv[])
 {
     signal(SIGINT, signalHandler); // Register signal handler for SIGINT
-
-    if (SDL_Init(SDL_INIT_JOYSTICK | SDL_INIT_HAPTIC | SDL_INIT_GAMECONTROLLER) != 0)
+    SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS4_RUMBLE, "1");
+    if (SDL_Init(SDL_INIT_GAMECONTROLLER) != 0)
     {
         std::cerr << "SDL_Init Error: " << SDL_GetError() << std::endl;
         return 1;
@@ -56,21 +56,28 @@ int main(int argc, char *argv[])
 
     for (int i = 0; i < numJoysticks; ++i)
     {
-        SDL_Joystick *joystick = SDL_JoystickOpen(i);
-        if (joystick)
+        if (SDL_IsGameController(i))
         {
-            joysticks.push_back(joystick);
-            std::cout << "Joystick " << i << " opened successfully." << std::endl;
+            SDL_GameController *controller = SDL_GameControllerOpen(i);
+            if (controller)
+            {
+                controllers.push_back(controller);
+                std::cout << "Controller " << i << " (" << SDL_GameControllerName(controller) << ") opened successfully." << std::endl;
+            }
+            else
+            {
+                std::cerr << "SDL_GameControllerOpen Error for controller " << i << ": " << SDL_GetError() << std::endl;
+            }
         }
         else
         {
-            std::cerr << "SDL_JoystickOpen Error for joystick " << i << ": " << SDL_GetError() << std::endl;
+            std::cerr << "Joystick " << i << " is not a game controller." << std::endl;
         }
     }
 
-    if (joysticks.empty())
+    if (controllers.empty())
     {
-        std::cerr << "No joysticks could be opened." << std::endl;
+        std::cerr << "No game controllers could be opened." << std::endl;
         SDL_Quit();
         return 1;
     }
@@ -79,9 +86,9 @@ int main(int argc, char *argv[])
     if (sockfd < 0)
     {
         std::cerr << "Error opening socket" << std::endl;
-        for (SDL_Joystick *joystick : joysticks)
+        for (SDL_GameController *controller : controllers)
         {
-            SDL_JoystickClose(joystick);
+            SDL_GameControllerClose(controller);
         }
         SDL_Quit();
         return 1;
@@ -92,9 +99,9 @@ int main(int argc, char *argv[])
     {
         std::cerr << "Error setting socket options" << std::endl;
         close(sockfd);
-        for (SDL_Joystick *joystick : joysticks)
+        for (SDL_GameController *controller : controllers)
         {
-            SDL_JoystickClose(joystick);
+            SDL_GameControllerClose(controller);
         }
         SDL_Quit();
         return 1;
@@ -112,9 +119,9 @@ int main(int argc, char *argv[])
     {
         std::cerr << "Error on binding: " << strerror(errno) << std::endl;
         close(sockfd);
-        for (SDL_Joystick *joystick : joysticks)
+        for (SDL_GameController *controller : controllers)
         {
-            SDL_JoystickClose(joystick);
+            SDL_GameControllerClose(controller);
         }
         SDL_Quit();
         return 1;
@@ -126,9 +133,9 @@ int main(int argc, char *argv[])
     {
         std::cerr << "Error on listen" << std::endl;
         close(sockfd);
-        for (SDL_Joystick *joystick : joysticks)
+        for (SDL_GameController *controller : controllers)
         {
-            SDL_JoystickClose(joystick);
+            SDL_GameControllerClose(controller);
         }
         SDL_Quit();
         return 1;
@@ -185,18 +192,18 @@ int main(int argc, char *argv[])
             std::cout << "Received command: " << buffer << std::endl;
 
             // Parsing the command
-            int joystickIndex;
+            int controllerIndex;
             Uint16 low_freq, high_freq;
             Uint32 duration;
-            if (sscanf(buffer, "%d %hu %hu %u", &joystickIndex, &low_freq, &high_freq, &duration) == 4)
+            if (sscanf(buffer, "%d %hu %hu %u", &controllerIndex, &low_freq, &high_freq, &duration) == 4)
             {
-                if (joystickIndex >= 0 && joystickIndex < joysticks.size())
+                if (controllerIndex >= 0 && controllerIndex < controllers.size())
                 {
-                    handleRumble(joysticks[joystickIndex], low_freq, high_freq, duration);
+                    handleRumble(controllers[controllerIndex], low_freq, high_freq, duration);
                 }
                 else
                 {
-                    std::cerr << "Invalid joystick index: " << joystickIndex << std::endl;
+                    std::cerr << "Invalid controller index: " << controllerIndex << std::endl;
                 }
             }
             else
@@ -212,9 +219,9 @@ int main(int argc, char *argv[])
 
     // Clean up resources before exiting
     close(sockfd);
-    for (SDL_Joystick *joystick : joysticks)
+    for (SDL_GameController *controller : controllers)
     {
-        SDL_JoystickClose(joystick);
+        SDL_GameControllerClose(controller);
     }
     SDL_Quit();
     std::cout << "Application closed gracefully." << std::endl;
